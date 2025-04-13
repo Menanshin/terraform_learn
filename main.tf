@@ -20,6 +20,36 @@ resource "yandex_compute_disk" "boot_disk" {
   size = var.instance_resources.disk.disk_size
 }
 
+resource "yandex_compute_disk" "secondary_disk_a" {
+  count = contains(var.zones, "ru-central1-a") ? var.secondary_disks.count : 0
+
+  name = "${var.secondary_disks.name}-a-${count.index}"
+  zone = "ru-central1-a"
+
+  type = var.secondary_disks.type
+  size = var.secondary_disks.size
+}
+
+resource "yandex_compute_disk" "secondary_disk_b" {
+  count = contains(var.zones, "ru-central1-b") ? var.secondary_disks.count : 0
+
+  name = "${var.secondary_disks.name}-b-${count.index}"
+  zone = "ru-central1-b"
+
+  type = var.secondary_disks.type
+  size = var.secondary_disks.size
+}
+
+resource "yandex_compute_disk" "secondary_disk_d" {
+  count = contains(var.zones, "ru-central1-d") ? var.secondary_disks.count : 0
+
+  name = "${var.secondary_disks.name}-d-${count.index}"
+  zone = "ru-central1-d"
+
+  type = var.secondary_disks.type
+  size = var.secondary_disks.size
+}
+
 resource "yandex_compute_instance" "this" {
   for_each = var.zones
 
@@ -35,6 +65,13 @@ resource "yandex_compute_instance" "this" {
 
   boot_disk {
     disk_id = yandex_compute_disk.boot_disk[each.value].id
+  }
+
+  dynamic "secondary_disk" {
+    for_each = each.value == "ru-central1-a" ? yandex_compute_disk.secondary_disk_a : each.value == "ru-central1-b" ? yandex_compute_disk.secondary_disk_b : each.value == "ru-central1-d" ? yandex_compute_disk.secondary_disk_d : []
+    content {
+      disk_id = try(secondary_disk.value.id, null)
+    }
   }
 
   network_interface {
