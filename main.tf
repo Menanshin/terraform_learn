@@ -13,7 +13,7 @@ resource "yandex_compute_disk" "boot_disk" {
   name     = local.boot_disk_name
   zone     = var.zone
   image_id = var.image_id
-  
+
   type = var.instance_resources.disk.disk_type
   size = var.instance_resources.disk.disk_size
 }
@@ -34,7 +34,16 @@ resource "yandex_compute_instance" "this" {
   }
 
   network_interface {
-    subnet_id = yandex_vpc_subnet.private.id
+    subnet_id      = yandex_vpc_subnet.private.id
+    nat            = true
+    nat_ip_address = yandex_vpc_address.this.external_ipv4_address[0].address
+  }
+
+  metadata = {
+    user-data = templatefile("cloud-init.yaml.tftpl", {
+      ydb_connect_string = yandex_ydb_database_serverless.this.ydb_full_endpoint,
+      bucket_domain_name = yandex_storage_bucket.this.bucket_domain_name
+    })
   }
 }
 
@@ -48,6 +57,13 @@ resource "yandex_vpc_subnet" "private" {
   zone           = var.zone
   v4_cidr_blocks = var.subnets[keys(var.subnets)[0]]
   network_id     = yandex_vpc_network.this.id
+}
+
+resource "yandex_vpc_address" "this" {
+  name = "${local.linux_vm_name}-adress"
+  external_ipv4_address {
+    zone_id = var.zone
+  }
 }
 
 # Создание Yandex Managed Service for YDB
@@ -78,8 +94,6 @@ resource "yandex_storage_bucket" "this" {
   bucket     = local.bucket_name
   access_key = yandex_iam_service_account_static_access_key.this.access_key
   secret_key = yandex_iam_service_account_static_access_key.this.secret_key
-  
-  depends_on = [ yandex_resourcemanager_folder_iam_member.storage_editor ]
 }
 
 resource "random_string" "bucket_name" {
