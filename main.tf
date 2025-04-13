@@ -1,20 +1,22 @@
 # Создание диска и виртуальной машины
 resource "yandex_compute_disk" "boot_disk" {
-  name     = "boot-disk"
-  zone     = "ru-central1-a"
-  image_id = "fd8ba9d5mfvlncknt2kd" # Ubuntu 22.04 LTS
-  size     = 15
+  name     = "${var.name_prefix}-boot-disk"
+  zone     = var.zone
+  image_id = var.image_id
+  
+  type = var.instance_resources.disk.disk_type
+  size = var.instance_resources.disk.disk_size
 }
 
 resource "yandex_compute_instance" "this" {
-  name                      = "linux-vm"
+  name                      = "${var.name_prefix}-linux-vm"
   allow_stopping_for_update = true
-  platform_id               = "standard-v3"
-  zone                      = "ru-central1-a"
+  platform_id               = var.instance_resources.platform_id
+  zone                      = var.zone
 
   resources {
-    cores  = "4"
-    memory = "8"
+    cores  = var.instance_resources.cores
+    memory = var.instance_resources.memory
   }
 
   boot_disk {
@@ -28,29 +30,29 @@ resource "yandex_compute_instance" "this" {
 
 # Создание VPC и подсети
 resource "yandex_vpc_network" "this" {
-  name = "private"
+  name = "${var.name_prefix}-private"
 }
 
 resource "yandex_vpc_subnet" "private" {
-  name           = "private"
-  zone           = "ru-central1-a"
-  v4_cidr_blocks = ["192.168.10.0/24"]
+  name           = keys(var.subnets)[0]
+  zone           = var.zone
+  v4_cidr_blocks = var.subnets[keys(var.subnets)[0]]
   network_id     = yandex_vpc_network.this.id
 }
 
 # Создание Yandex Managed Service for YDB
 resource "yandex_ydb_database_serverless" "this" {
-  name = "test-ydb-serverless"
+  name = "${var.name_prefix}-ydb-serverless"
 }
 
 # Создание сервисного аккаунта 
 resource "yandex_iam_service_account" "bucket" {
-  name = "bucket-sa"
+  name = "${var.name_prefix}-bucket-sa"
 }
 
 # Назначение роли сервисному аккаунту
 resource "yandex_resourcemanager_folder_iam_member" "storage_editor" {
-  folder_id = "<folder_id>"
+  folder_id = var.folder_id
   role      = "storage.editor"
   member    = "serviceAccount:${yandex_iam_service_account.bucket.id}"
 }
@@ -63,7 +65,7 @@ resource "yandex_iam_service_account_static_access_key" "this" {
 
 # Создание бакета 
 resource "yandex_storage_bucket" "this" {
-  bucket     = "terraform-bucket-${random_string.bucket_name.result}"
+  bucket     = "${var.name_prefix}-terraform-bucket-${random_string.bucket_name.result}"
   access_key = yandex_iam_service_account_static_access_key.this.access_key
   secret_key = yandex_iam_service_account_static_access_key.this.secret_key
   
